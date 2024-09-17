@@ -85,6 +85,61 @@ async def ask_question(ask: Ask):
     #####\n",
     # implement rag flow here\n",
     ######\n",
+   
+    vector = VectorizedQuery(vector=get_embedding(start_phrase), k_nearest_neighbors=5, fields="vector")
+    question_type = ask.type
+
+    # create search client to retrieve movies from the vector store
+    found_docs = list(search_client.search(
+        search_text=None,
+        query_type="semantic",
+        semantic_configuration_name="movies-semantic-config",
+        vector_queries=[vector],
+        select=["title", "genre", "plot", "year"],
+        top=5
+    ))
+
+    found_docs_as_text = " "
+    # print the found documents and the field that were selected
+    for doc in found_docs:
+        print("Movie: {}".format(doc["title"]))
+        print("Genre: {}".format(doc["genre"]))
+        print("Year: {}".format(doc["year"]))
+        print("----------")
+        found_docs_as_text += " "+ "Movie Title: {}".format(doc["title"]) +" "+ "Release Year: {}".format(doc["year"]) + " "+ "Movie Plot: {}".format(doc["plot"])
+    
+    # augment the question with the found documents and ask the LLM to generate a response
+    system_prompt = "Here is what you need to do:"
+
+    parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
+    joined_parameters = ''.join(parameters)
+
+    if question_type == QuestionType.multiple_choice:
+        system_prompt = "Correct option w/o index, no bs:"
+
+        parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
+        joined_parameters = ''.join(parameters)
+    elif question_type == QuestionType.true_or_false:
+        system_prompt = "boolean, no bs:"
+
+        parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
+        joined_parameters = ''.join(parameters)
+    elif question_type == QuestionType.estimation:
+        system_prompt = "Only Number, no bs:"
+
+        parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
+        joined_parameters = ''.join(parameters)
+    else:
+        system_prompt = "Answer:"
+
+        parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
+        joined_parameters = ''.join(parameters)
+
+    
+    response = client.chat.completions.create(
+            model = deployment_name,
+            messages = [{"role" : "assistant", "content" : joined_parameters}]
+        )
 
     answer = Answer(answer=response.choices[0].message.content)
     answer.correlationToken = ask.correlationToken
