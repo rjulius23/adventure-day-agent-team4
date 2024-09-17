@@ -7,7 +7,11 @@ from pydantic import BaseModel
 from enum import Enum
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-import redis
+from azure.search.documents import SearchClient
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.models import (
+    VectorizedQuery
+)
 
 app = FastAPI()
 
@@ -50,17 +54,18 @@ deployment_name = os.getenv("AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME")
 index_name = "movies-semantic-index"
 service_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT")
 model_name = os.getenv("AZURE_OPENAI_COMPLETION_MODEL")
+credential = AzureKeyCredential(os.environ["AZURE_AI_SEARCH_KEY"]) if len(os.environ["AZURE_AI_SEARCH_KEY"]) > 0 else DefaultAzureCredential()
 
-# Redis connection details
-redis_host = os.getenv('REDIS_HOST')
-redis_port = os.getenv('REDIS_PORT')
-redis_password = os.getenv('REDIS_PASSWORD')
+# # Redis connection details
+# redis_host = os.getenv('REDIS_HOST')
+# redis_port = os.getenv('REDIS_PORT')
+# redis_password = os.getenv('REDIS_PASSWORD')
  
-# Connect to the Redis server
-conn = redis.Redis(host=redis_host, port=redis_port, password=redis_password, encoding='utf-8', decode_responses=True)
+# # Connect to the Redis server
+# conn = redis.Redis(host=redis_host, port=redis_port, password=redis_password, encoding='utf-8', decode_responses=True)
  
-if conn.ping():
-    print("Connected to Redis")
+# if conn.ping():
+#     print("Connected to Redis")
 
 @app.get("/")
 async def root():
@@ -78,10 +83,74 @@ async def ask_question(ask: Ask):
     #####\n",
     # implement cached rag flow here\n",
     ######\n",
-    
-    answer = Answer(answer=response.choices[0].message.content)
-    answer.correlationToken = ask.correlationToken
-    answer.promptTokensUsed = response.usage.prompt_tokens
-    answer.completionTokensUsed = response.usage.completion_tokens
 
-    return answer
+    index_name = "question-semantic-index"
+    print(start_phrase)
+
+    # create new searchclient using our new index for the questions
+    search_client = SearchClient(
+        endpoint=os.environ["AZURE_AI_SEARCH_ENDPOINT"], 
+        index_name=index_name,
+        credential=credential
+    )
+
+    
+    # check if the question &  answer is in the cache already
+    vector = VectorizedQuery(vector=get_embedding(ask.question), k_nearest_neighbors=5, fields="vector")
+    found_questions = list(search_client.search(
+        search_text=None,
+    query_type="semantic",
+    semantic_configuration_name="question-semantic-config",
+    vector_queries=[vector],
+    select=["question", "answer"],
+    top=5
+    ))
+    questionMatchCount = len(found_questions) 
+    print(found_questions) 
+    
+    #  put the new question & answer in the cache as wel
+    docIdCount = search_client.get_document_count()  +1 
+
+    if(questionMatchCount>0):
+        print ("Found a match in the cache.")
+        # put the new question & answer in the cache as well
+        #search_client.upload_documents(found_questions[0])
+        best_match = max(found_questions, key=lambda x: x.get('score', 0))
+        print(best_match)
+        search_client.upload_documents({'question': ask.question, 'answer': best_match["answer"], 'id': str(docIdCount), 'vector': get_embedding(ask.question)})
+        # return the answer        
+        return Answer(answer=best_match["answer"], correlationToken=ask.correlationToken, promptTokensUsed=0, completionTokensUsed=0)
+    
+    else:
+        print("No match found in the cache.")        
+        
+        #   reach out to the llm to get the answer. 
+        print('Sending a request to LLM')
+        start_phrase = ask.question
+        messages=  [{"role" : "assistant", "content" : start_phrase},
+                     { "role" : "system", "content" : "Answer this question with a very short answer. Don't answer with a full sentence, and do not format the answer."}]
+        
+        response = client.chat.completions.create(
+             model = deployment_name,
+             messages =messages,
+        )
+        answer = Answer(answer=response.choices[0].message.content)
+
+        #  put the new question & answer in the cache as wel
+        docIdCount = search_client.get_document_count()  +1 
+        
+        search_client.upload_documents({'question': ask.question, 'answer': answer.answer, 'id': str(docIdCount), 'vector': get_embedding(ask.question)})
+
+
+        print ("Added a new answer and question to the cache: " + answer.answer + "in position" + str(docIdCount))
+    
+        answer = Answer(answer=response.choices[0].message.content)
+        answer.correlationToken = ask.correlationToken
+        answer.promptTokensUsed = response.usage.prompt_tokens
+        answer.completionTokensUsed = response.usage.completion_tokens
+
+        return answer
+
+# use an embeddingsmodel to create embeddings
+def get_embedding(text, model=os.getenv("AZURE_OPENAI_EMBEDDING_MODEL")):
+    return client.embeddings.create(input = [text], model=model).data[0].embedding
