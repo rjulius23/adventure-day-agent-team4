@@ -78,11 +78,17 @@ async def ask_question(ask: Ask):
     """
 
     start_phrase =  ask.question
+    question_type = ask.type
     response: openai.types.chat.chat_completion.ChatCompletion = None
 
-    #####\n",
-    # implement cached rag flow here\n",
-    ######\n",
+    if question_type == QuestionType.multiple_choice:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, just the option not the index of the choice, no bs."
+    elif question_type == QuestionType.true_or_false:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the True or False without any making it a sentence it based on what the tool returned in the content field, no bs."
+    elif question_type == QuestionType.estimation:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, no bs."
+    else:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, no bs."
 
     index_name = "question-semantic-index"
     print(start_phrase)
@@ -115,41 +121,41 @@ async def ask_question(ask: Ask):
         print ("Found a match in the cache.")
         # put the new question & answer in the cache as well
         #search_client.upload_documents(found_questions[0])
-        best_match = max(found_questions, key=lambda x: x.get('score', 0))
+        best_match = max(found_questions, key=lambda x: x.get('@search.score', 0))
         print(best_match)
-        search_client.upload_documents({'question': ask.question, 'answer': best_match["answer"], 'id': str(docIdCount), 'vector': get_embedding(ask.question)})
-        # return the answer        
-        return Answer(answer=best_match["answer"], correlationToken=ask.correlationToken, promptTokensUsed=0, completionTokensUsed=0)
+        # return the answer
+        if best_match["@search.score"] > 0.95:
+            search_client.upload_documents({'question': ask.question, 'answer': best_match["answer"], 'id': str(docIdCount), 'vector': get_embedding(ask.question)})
+            return Answer(answer=best_match["answer"], correlationToken=ask.correlationToken, promptTokensUsed=0, completionTokensUsed=0)
     
-    else:
-        print("No match found in the cache.")        
+    print("No match found in the cache.")        
         
-        #   reach out to the llm to get the answer. 
-        print('Sending a request to LLM')
-        start_phrase = ask.question
-        messages=  [{"role" : "assistant", "content" : start_phrase},
-                     { "role" : "system", "content" : "Answer this question with a very short answer. Don't answer with a full sentence, and do not format the answer."}]
+    #   reach out to the llm to get the answer. 
+    print('Sending a request to LLM')
+    start_phrase = ask.question
+    messages=  [{"role" : "assistant", "content" : start_phrase},
+                    { "role" : "system", "content" : sys_prompt}]
         
-        response = client.chat.completions.create(
-             model = deployment_name,
-             messages =messages,
-        )
-        answer = Answer(answer=response.choices[0].message.content)
+    response = client.chat.completions.create(
+            model = deployment_name,
+            messages =messages,
+    )
+    answer = Answer(answer=response.choices[0].message.content)
 
-        #  put the new question & answer in the cache as wel
-        docIdCount = search_client.get_document_count()  +1 
+    #  put the new question & answer in the cache as wel
+    docIdCount = search_client.get_document_count()  +1 
         
-        search_client.upload_documents({'question': ask.question, 'answer': answer.answer, 'id': str(docIdCount), 'vector': get_embedding(ask.question)})
+    search_client.upload_documents({'question': ask.question, 'answer': answer.answer, 'id': str(docIdCount), 'vector': get_embedding(ask.question)})
 
 
-        print ("Added a new answer and question to the cache: " + answer.answer + "in position" + str(docIdCount))
+    print ("Added a new answer and question to the cache: " + answer.answer + "in position" + str(docIdCount))
     
-        answer = Answer(answer=response.choices[0].message.content)
-        answer.correlationToken = ask.correlationToken
-        answer.promptTokensUsed = response.usage.prompt_tokens
-        answer.completionTokensUsed = response.usage.completion_tokens
+    answer = Answer(answer=response.choices[0].message.content)
+    answer.correlationToken = ask.correlationToken
+    answer.promptTokensUsed = response.usage.prompt_tokens
+    answer.completionTokensUsed = response.usage.completion_tokens
 
-        return answer
+    return answer
 
 # use an embeddingsmodel to create embeddings
 def get_embedding(text, model=os.getenv("AZURE_OPENAI_EMBEDDING_MODEL")):

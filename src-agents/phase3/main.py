@@ -215,8 +215,17 @@ async def ask_question(ask: Ask):
     question = ask.question
     question_type = ask.type
 
+    if question_type == QuestionType.multiple_choice:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, just the option not the index of the choice, no bs."
+    elif question_type == QuestionType.true_or_false:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the True or False without any making it a sentence it based on what the tool returned in the content field, no bs."
+    elif question_type == QuestionType.estimation:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, no bs."
+    else:
+        sys_prompt = "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, no bs."
+
     messages= [{"role" : "assistant", "content" : question}
-        , { "role" : "system", "content" : "Answer the question of the user and use the tools available to you. Only return the answer without encapsulating it in a sentence to the question what the tool returned in the content field, no bs."}
+        , { "role" : "system", "content" : sys_prompt}
     ]
     first_response = client.chat.completions.create(
         model = deployment_name,
@@ -266,13 +275,11 @@ async def ask_question(ask: Ask):
                 temperature=0,
                 messages = messages)  # get a new response from the model where it can see the function response
             
-            print("second_response")
-            
-            return second_response.choices[0].message.content
-
-    answer = Answer(answer=response.choices[0].message.content)
+            print(second_response)
+    
+    answer = Answer(answer=second_response.choices[0].message.content)
     answer.correlationToken = ask.correlationToken
-    answer.promptTokensUsed = response.usage.prompt_tokens
-    answer.completionTokensUsed = response.usage.completion_tokens
+    answer.promptTokensUsed = second_response.usage.prompt_tokens
+    answer.completionTokensUsed = second_response.usage.completion_tokens
 
     return answer
