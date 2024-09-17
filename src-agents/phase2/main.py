@@ -82,6 +82,8 @@ async def ask_question(ask: Ask):
     start_phrase =  ask.question
     response: openai.types.chat.chat_completion.ChatCompletion = None
 
+    print(start_phrase)
+
     #####\n",
     # implement rag flow here\n",
     ######\n",
@@ -120,7 +122,7 @@ async def ask_question(ask: Ask):
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
     elif question_type == QuestionType.true_or_false:
-        system_prompt = "boolean, no bs:"
+        system_prompt = "true or false, no bs:"
 
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
