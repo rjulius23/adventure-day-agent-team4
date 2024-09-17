@@ -127,7 +127,7 @@ async def ask_question(ask: Ask):
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
     elif question_type == QuestionType.estimation:
-        system_prompt = "Only Number, no bs:"
+        system_prompt = "Give me a number, no bs:"
 
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
