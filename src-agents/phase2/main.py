@@ -117,22 +117,22 @@ async def ask_question(ask: Ask):
     joined_parameters = ''.join(parameters)
 
     if question_type == QuestionType.multiple_choice:
-        system_prompt = "Correct option w/o index, no bs:"
+        system_prompt = "Correct option w/o index based on the provided context, no bs:"
 
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
     elif question_type == QuestionType.true_or_false:
-        system_prompt = "true or false, no bs:"
+        system_prompt = "Only reply true or false based on the context, no bs:"
 
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
     elif question_type == QuestionType.estimation:
-        system_prompt = "Give me a number, no bs:"
+        system_prompt = "Only provide the numeric value as an answer based on the provided context, no bs:"
 
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
     else:
-        system_prompt = "Answer:"
+        system_prompt = "If the question type is unknown answer the question as briefly as possible, with true or false only"
 
         parameters = [system_prompt, ' Context:', found_docs_as_text , ' Question:', start_phrase]
         joined_parameters = ''.join(parameters)
