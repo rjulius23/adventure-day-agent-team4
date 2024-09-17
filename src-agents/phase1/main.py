@@ -61,6 +61,8 @@ async def ask_question(ask: Ask):
     question_type = ask.type
     response: openai.types.chat.chat_completion.ChatCompletion = None
 
+    print(f"Question: {start_phrase}")
+
     # Send a completion call to generate an answer
 
     if question_type == QuestionType.multiple_choice:
