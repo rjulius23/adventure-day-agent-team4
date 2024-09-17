@@ -58,9 +58,35 @@ async def ask_question(ask: Ask):
     # Send a completion call to generate an answer
     print('Sending a request to openai')
     start_phrase =  ask.question
+    question_type = ask.type
     response: openai.types.chat.chat_completion.ChatCompletion = None
 
     # Send a completion call to generate an answer
+
+    if question_type == QuestionType.multiple_choice:
+        response = client.chat.completions.create(
+            model = deployment_name,
+            messages = [{"role" : "assistant", "content" : start_phrase}, 
+                     { "role" : "system", "content" : "Answer with the correct option w/o index, no bs:"}]
+        )
+    elif question_type == QuestionType.true_or_false:
+        response = client.chat.completions.create(
+            model = deployment_name,
+            messages = [{"role" : "assistant", "content" : start_phrase}, 
+                     { "role" : "system", "content" : "Answer true or false, no bs"}]
+        )
+    elif question_type == QuestionType.estimation:
+        response = client.chat.completions.create(
+            model = deployment_name,
+            messages = [{"role" : "assistant", "content" : start_phrase}, 
+                     { "role" : "system", "content" : "Give me a number, no bs"}]
+        )
+    else:
+        response = client.chat.completions.create(
+            model = deployment_name,
+            messages = [{"role" : "assistant", "content" : start_phrase}, 
+                     { "role" : "system", "content" : "Answer this question:"}]
+        )
 
     answer = Answer(answer=response.choices[0].message.content)
     answer.correlationToken = ask.correlationToken
